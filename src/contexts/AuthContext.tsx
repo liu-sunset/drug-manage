@@ -1,0 +1,149 @@
+import { createContext, useCallback, useEffect, useMemo, useState, useRef } from "react"
+import type { Session, User } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase"
+import type { Profile } from "@/types"
+
+interface AuthState {
+  session: Session | null
+  user: User | null
+  profile: Profile | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  signUp: (email: string, password: string) => Promise<{ error: string | null }>
+  signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
+  setUsername: (username: string) => Promise<{ error: string | null }>
+}
+
+export const AuthContext = createContext<AuthState | undefined>(undefined)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const loadingTimedOut = useRef(false)
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single()
+    return data as Profile | null
+  }
+
+  const refreshProfile = useCallback(async () => {
+    if (!user) return
+    const p = await fetchProfile(user.id)
+    setProfile(p)
+  }, [user])
+
+  useEffect(() => {
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    async function initAuth() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (cancelled) return
+        if (timeoutId) clearTimeout(timeoutId)
+        setSession(session)
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          fetchProfile(session.user.id).then((p) => {
+            if (!cancelled) setProfile(p)
+          })
+        }
+      } catch {
+        // getSession failed (likely network error), leave session as null
+      } finally {
+        if (!cancelled) {
+          if (timeoutId) clearTimeout(timeoutId)
+          setLoading(false)
+        }
+      }
+    }
+
+    initAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") return
+        if (cancelled) return
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+        if (session?.user) {
+          fetchProfile(session.user.id).then((p) => {
+            if (!cancelled) setProfile(p)
+          })
+        } else {
+          setProfile(null)
+        }
+      }
+    )
+
+    // 保底：8 秒后强制退出 loading，防止网络不通导致无限等待
+    timeoutId = setTimeout(() => {
+      if (!loadingTimedOut.current) {
+        loadingTimedOut.current = true
+        if (!cancelled) setLoading(false)
+      }
+    }, 8000)
+
+    return () => {
+      cancelled = true
+      if (timeoutId) clearTimeout(timeoutId)
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) return { error: error.message }
+    return { error: null }
+  }, [])
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (error) return { error: error.message }
+    return { error: null }
+  }, [])
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut()
+    setProfile(null)
+  }, [])
+
+  const setUsername = useCallback(async (username: string) => {
+    if (!user) return { error: "未登录" }
+    const { error } = await supabase
+      .from("profiles")
+      .insert({ id: user.id, username })
+    if (error) {
+      if (error.code === "23505") return { error: "该用户名已被占用" }
+      return { error: error.message }
+    }
+    await refreshProfile()
+    return { error: null }
+  }, [user, refreshProfile])
+
+  const value = useMemo(() => ({
+    session,
+    user,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    refreshProfile,
+    setUsername,
+  }), [session, user, profile, loading, signIn, signUp, signOut, refreshProfile, setUsername])
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
+}

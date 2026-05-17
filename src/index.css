@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Hand-Drawn Palette */
+    --background: 46 33% 96%;
+    --foreground: 0 0% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 18%;
+    --primary: 0 100% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 24% 87%;
+    --secondary-foreground: 0 0% 18%;
+    --muted: 40 24% 87%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 219 56% 41%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 219 56% 41%;
+    --radius: 0px;
+
+    /* Wobbly radius tokens */
+    --radius-wobbly: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    --radius-wobbly-sm: 185px 25px 155px 25px / 25px 175px 25px 165px;
+    --radius-wobbly-md: 225px 15px 195px 15px / 15px 195px 15px 225px;
+    --radius-wobbly-lg: 255px 15px 225px 15px / 15px 225px 15px 255px;
+
+    /* Hard shadows */
+    --shadow-hard: 4px 4px 0px 0px #2d2d2d;
+    --shadow-hard-sm: 2px 2px 0px 0px #2d2d2d;
+    --shadow-hard-lg: 6px 6px 0px 0px #2d2d2d;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Patrick Hand", cursive;
+    font-size: 1.05rem;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Paper texture: dot grid pattern */
+    background-image: radial-gradient(#d4cec4 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: 0 0;
+  }
+  /* Handwritten headings */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Kalam", cursive;
+    font-weight: 700;
+  }
+}
+
+@layer utilities {
+  /* Wobbly border radius utilities */
+  .rounded-wobbly {
+    border-radius: var(--radius-wobbly);
+  }
+  .rounded-wobbly-sm {
+    border-radius: var(--radius-wobbly-sm);
+  }
+  .rounded-wobbly-md {
+    border-radius: var(--radius-wobbly-md);
+  }
+  .rounded-wobbly-lg {
+    border-radius: var(--radius-wobbly-lg);
+  }
+  /* Hard shadow utilities */
+  .shadow-hard {
+    box-shadow: var(--shadow-hard);
+  }
+  .shadow-hard-sm {
+    box-shadow: var(--shadow-hard-sm);
+  }
+  .shadow-hard-lg {
+    box-shadow: var(--shadow-hard-lg);
+  }
+}
