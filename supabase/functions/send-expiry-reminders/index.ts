@@ -9,14 +9,19 @@ const supabase = createClient(SB_URL, SB_SERVICE_ROLE_KEY)
 
 Deno.serve(async (_req: Request) => {
   try {
-    const targetDate = new Date()
-    targetDate.setDate(targetDate.getDate() + 7)
-    const targetDateStr = targetDate.toISOString().split("T")[0]
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split("T")[0]
+
+    const maxDate = new Date(today)
+    maxDate.setDate(maxDate.getDate() + 7)
+    const maxDateStr = maxDate.toISOString().split("T")[0]
 
     const { data: drugs, error: queryError } = await supabase
       .from("drugs")
       .select("id, name, expiry_date, user_id")
-      .eq("expiry_date", targetDateStr)
+      .gte("expiry_date", todayStr)
+      .lte("expiry_date", maxDateStr)
       .eq("reminder_sent", false)
 
     if (queryError) {
@@ -48,11 +53,16 @@ Deno.serve(async (_req: Request) => {
       const email = emailMap.get(drug.user_id)
       if (!email) { failed++; continue }
 
+      const expiry = new Date(drug.expiry_date)
+      expiry.setHours(0, 0, 0, 0)
+      const daysLeft = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      const daysText = daysLeft <= 0 ? "已过期" : `仅剩 ${daysLeft} 天`
+
       const htmlBody = `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
           <h2 style="color: #D34947;">药物过期提醒</h2>
           <p>尊敬的<strong>${username}</strong>，你好！</p>
-          <p>你购买的药物<strong>${drug.name}</strong>即将过期，仅剩一周的保质期，请尽快重新购置！</p>
+          <p>你购买的药物<strong>${drug.name}</strong>（过期日期 ${drug.expiry_date}）${daysText}，请尽快重新购置！</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="color: #999; font-size: 12px;">此邮件由药物管理系统自动发送</p>
         </div>`
