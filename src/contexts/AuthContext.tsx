@@ -13,6 +13,7 @@ interface AuthState {
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   setUsername: (username: string) => Promise<{ error: string | null }>
+  deleteAccount: () => Promise<{ error: string | null }>
 }
 
 export const AuthContext = createContext<AuthState | undefined>(undefined)
@@ -129,6 +130,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null }
   }, [user, refreshProfile])
 
+  const deleteAccount = useCallback(async () => {
+    if (!session?.access_token) return { error: "未登录" }
+
+    const edgeFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`
+
+    try {
+      const res = await fetch(edgeFunctionUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      const body = await res.json() as { success?: boolean; error?: string }
+
+      if (!res.ok || body.error) {
+        return { error: body.error || "注销失败，请稍后重试" }
+      }
+
+      setProfile(null)
+      setUser(null)
+      setSession(null)
+      return { error: null }
+    } catch {
+      return { error: "网络错误，请检查网络后重试" }
+    }
+  }, [session?.access_token])
+
   const value = useMemo(() => ({
     session,
     user,
@@ -139,7 +169,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     refreshProfile,
     setUsername,
-  }), [session, user, profile, loading, signIn, signUp, signOut, refreshProfile, setUsername])
+    deleteAccount,
+  }), [session, user, profile, loading, signIn, signUp, signOut, refreshProfile, setUsername, deleteAccount])
 
   return (
     <AuthContext.Provider value={value}>

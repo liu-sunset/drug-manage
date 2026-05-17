@@ -28,4 +28,16 @@ jobs:
             exit 1
           fi
 
-          echo "邮件提醒任务执行成功"
+          SENT=$(echo "$BODY" | jq -r '.sent // 0')
+          FAILED=$(echo "$BODY" | jq -r '.failed // 0')
+          PROCESSED=$(echo "$BODY" | jq -r '.processed // 0')
+          ERRORS=$(echo "$BODY" | jq -r '.errors // []')
+
+          echo "处理: $PROCESSED, 发送成功: $SENT, 失败: $FAILED"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::warning::${FAILED} 封邮件发送失败"
+            echo "错误详情: $ERRORS"
+          fi
+
+          echo "邮件提醒任务执行完成"

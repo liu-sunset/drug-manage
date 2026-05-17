@@ -1,10 +1,12 @@
-import { memo } from "react"
-import { LogOutIcon, PillIcon } from "lucide-react"
+import { memo, useState } from "react"
+import { LogOutIcon, PillIcon, UserXIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog"
 import { useAuth } from "@/hooks/useAuth"
 
 export const AppHeader = memo(function AppHeader() {
   const { profile, signOut } = useAuth()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   return (
     <header className="sticky top-0 z-40 bg-[#fdfbf7]/90 backdrop-blur-sm border-b-[3px] border-pencil/20">
@@ -29,8 +31,18 @@ export const AppHeader = memo(function AppHeader() {
             <LogOutIcon className="w-4 h-4" strokeWidth={2.5} />
             <span className="hidden sm:inline">退出</span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteDialogOpen(true)}
+            className="gap-1.5 hover:text-marker hover:border-marker"
+          >
+            <UserXIcon className="w-4 h-4" strokeWidth={2.5} />
+            <span className="hidden sm:inline">注销账户</span>
+          </Button>
         </div>
       </div>
+      <DeleteAccountDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} />
     </header>
   )
 })

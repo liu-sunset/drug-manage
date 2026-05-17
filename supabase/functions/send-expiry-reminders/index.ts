@@ -9,6 +9,13 @@ const supabase = createClient(SB_URL, SB_SERVICE_ROLE_KEY)
 
 Deno.serve(async (_req: Request) => {
   try {
+    // 验证请求来源
+    const authHeader = _req.headers.get("Authorization")
+    const expectedKey = Deno.env.get("SB_ANON_KEY")
+    if (!expectedKey || !authHeader || authHeader !== `Bearer ${expectedKey}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })
+    }
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const todayStr = today.toISOString().split("T")[0]
@@ -34,15 +41,23 @@ Deno.serve(async (_req: Request) => {
 
     const userIds = [...new Set(drugs.map((d) => d.user_id))]
 
-    // 并行获取 profiles 和 users
-    const [{ data: profiles }, { data: users }] = await Promise.all([
-      supabase.from("profiles").select("id, username").in("id", userIds),
-      supabase.schema("auth").from("users").select("id, email").in("id", userIds),
-    ])
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .in("id", userIds)
 
-    // 构建查找 Map
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.username]))
-    const emailMap = new Map((users ?? []).map((u) => [u.id, u.email]))
+
+    // 使用 Auth Admin API 获取用户邮箱（auth schema 不通过 PostgREST 暴露）
+    const userResults = await Promise.all(
+      userIds.map((id) => supabase.auth.admin.getUserById(id)),
+    )
+    const emailMap = new Map<string, string>()
+    userResults.forEach(({ data }: { data: { user: { id: string; email: string } } | null }) => {
+      if (data?.user?.email) {
+        emailMap.set(data.user.id, data.user.email)
+      }
+    })
 
     let sent = 0
     let failed = 0

@@ -138,8 +138,8 @@ background-size: 22px 22px;
 
 ### 数据流
 
-- `useAuth()` hook 提供 `{ user, profile, loading, signIn, signUp, signOut, setUsername }`
-- `useDrugs()` hook 从 `useAuth()` 获取 `user.id`，封装 drugs 表的 CRUD，每次操作后自动 `fetchDrugs()`
+- `useAuth()` hook 提供 `{ user, profile, loading, session, signIn, signUp, signOut, refreshProfile, setUsername, deleteAccount }`
+- `useDrugs()` hook 从 `useAuth()` 获取 `user.id`，封装 drugs 表的 CRUD，每次操作后自动 `fetchDrugs()`。返回 `{ drugs, loading, error, fetchDrugs, addDrug, updateDrug, deleteDrug }`
 - `expiry_date` 在客户端计算（`production_date + shelf_life_days`），写入时直接存入数据库，不做服务端计算
 - 过期状态判定（`getExpiryStatus`）：expired(<0天) | urgent(≤7天) | warning(≤30天) | safe(>30天)
 
@@ -157,15 +157,47 @@ RLS 策略确保用户只能读写自己的数据：profiles 按 `auth.uid() = i
 ### Edge Function：过期邮件提醒
 
 `supabase/functions/send-expiry-reminders/index.ts` (Deno)：
-- 查询 `expiry_date = today+7天 AND reminder_sent = FALSE` 的药物
-- JOIN profiles 获取 username，通过 `auth.users` 获取 email
-- 逐条通过 Resend API 发送中文提醒邮件
+- 查询 `expiry_date >= today AND expiry_date <= today+7天 AND reminder_sent = FALSE` 的药物（7 天范围内，而非精确匹配一天）
+- 分步查询：先查 drugs，再分别查 profiles 和 auth.users 构建 Map 做 O(1) 查找。**不能使用 PostgREST 嵌入式资源语法**（如 `profiles!inner`），因为 `drugs.user_id` 的 FK 指向 `auth.users` 而非 `profiles`，不存在直接外键关系
+- 逐条通过 Resend API 发送中文提醒邮件，邮件中动态显示剩余天数（「仅剩 3 天」/「已过期」）
 - 发送成功后设置 `reminder_sent = TRUE`（同一药物只提醒一次）
-- 需通过 pg_cron 每天 8:00 触发
 
-需要的 secrets: `RESEND_API_KEY`, `SB_URL`, `SB_SERVICE_ROLE_KEY`, `SENDER_EMAIL`（可选，默认 `noreply@resend.dev`）
+需要的 Edge Function secrets（通过 `supabase secrets set` 配置）：
+- `RESEND_API_KEY` — Resend API key
+- `SB_URL` — Supabase 项目 URL
+- `SB_SERVICE_ROLE_KEY` — Supabase service_role key（用于读取 auth.users 表获取邮箱）
+- `SENDER_EMAIL`（可选，默认 `noreply@resend.dev`）
 
 Supabase 不允许 secret 名称以 `SUPABASE_` 开头，使用 `SB_` 前缀。
+
+部署：`supabase functions deploy send-expiry-reminders`
+
+### Edge Function：账户注销
+
+`supabase/functions/delete-account/index.ts` (Deno)：
+- 接收用户 JWT（Authorization: Bearer），通过 `supabase.auth.getUser(token)` 验证身份
+- 调用 `supabase.auth.admin.deleteUser(user.id)` 删除 auth user
+- `ON DELETE CASCADE` 自动清理 profiles 和 drugs 表
+- 前端无法直接调用 `admin.deleteUser()`（需要 service_role key），必须通过此 Edge Function
+- 前端 `AuthContext.deleteAccount()` 用当前 session 的 access_token 调用此 Function，成功后手动清除本地 state
+
+需要的 secrets（与 `send-expiry-reminders` 共用）：
+- `SB_URL` — Supabase 项目 URL
+- `SB_SERVICE_ROLE_KEY` — Supabase service_role key
+
+部署：`supabase functions deploy delete-account`
+
+### 定时触发：GitHub Actions
+
+pg_cron 需要 Supabase Pro 计划（免费计划不可用），本项目使用 GitHub Actions 替代。
+
+`.github/workflows/send-expiry-reminders.yml`：
+- 每天 **北京时间 9:20**（UTC 1:20）自动调用 Edge Function
+- 支持 `workflow_dispatch` 手动触发（在 GitHub Actions 页面操作）
+- 通过 curl POST 调用 Edge Function，Authorization header 携带 anon key
+- 需在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置两个 secrets：
+  - `SUPABASE_URL` — Supabase 项目 URL（与 `.env` 中 `VITE_SUPABASE_URL` 相同）
+  - `SUPABASE_ANON_KEY` — Supabase 匿名 key（与 `.env` 中 `VITE_SUPABASE_ANON_KEY` 相同）
 
 ### 环境变量
 
