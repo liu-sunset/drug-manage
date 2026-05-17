@@ -7,15 +7,6 @@ const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY")!
 
 const supabase = createClient(SB_URL, SB_SERVICE_ROLE_KEY)
 
-interface ExpiringDrug {
-  id: string
-  name: string
-  expiry_date: string
-  user_id: string
-  username: string
-  email: string
-}
-
 Deno.serve(async (_req: Request) => {
   try {
     const targetDate = new Date()
@@ -24,11 +15,7 @@ Deno.serve(async (_req: Request) => {
 
     const { data: drugs, error: queryError } = await supabase
       .from("drugs")
-      .select(`
-        id, name, expiry_date, user_id,
-        profiles!inner(username),
-        auth_users:user_id(email)
-      `)
+      .select("id, name, expiry_date, user_id")
       .eq("expiry_date", targetDateStr)
       .eq("reminder_sent", false)
 
@@ -40,19 +27,25 @@ Deno.serve(async (_req: Request) => {
       return new Response(JSON.stringify({ processed: 0, sent: 0, failed: 0 }), { status: 200 })
     }
 
+    const userIds = [...new Set(drugs.map((d) => d.user_id))]
+
+    // 并行获取 profiles 和 users
+    const [{ data: profiles }, { data: users }] = await Promise.all([
+      supabase.from("profiles").select("id, username").in("id", userIds),
+      supabase.schema("auth").from("users").select("id, email").in("id", userIds),
+    ])
+
+    // 构建查找 Map
+    const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.username]))
+    const emailMap = new Map((users ?? []).map((u) => [u.id, u.email]))
+
     let sent = 0
     let failed = 0
     const errors: string[] = []
 
-    for (const drugRaw of drugs) {
-      const drug = drugRaw as unknown as {
-        id: string; name: string; expiry_date: string; user_id: string
-        profiles: { username: string }[]
-        auth_users: { email: string }[]
-      }
-
-      const username = drug.profiles?.[0]?.username ?? "用户"
-      const email = drug.auth_users?.[0]?.email
+    for (const drug of drugs) {
+      const username = profileMap.get(drug.user_id) ?? "用户"
+      const email = emailMap.get(drug.user_id)
       if (!email) { failed++; continue }
 
       const htmlBody = `
