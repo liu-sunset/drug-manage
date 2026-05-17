@@ -1,0 +1,31 @@
+name: 药物过期邮件提醒
+
+on:
+  schedule:
+    # 北京时间 9:20 = UTC 1:20
+    - cron: "20 1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 调用 Supabase Edge Function
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/send-expiry-reminders")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP 状态码: $HTTP_CODE"
+          echo "响应内容: $BODY"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "::error::Edge Function 返回非 200 状态码: $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "邮件提醒任务执行成功"
