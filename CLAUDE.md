@@ -117,6 +117,8 @@ background-size: 22px 22px;
    - 有 session 有 profile → 放行
 4. 新用户注册后 Supabase Auth 自动创建 `auth.users` 行，数据库 trigger 自动创建默认 profiles 行（username=`user_XXXXXXXX`），前端 `/set-username` 页面调用 `setUsername()` 更新用户名
 5. `LoginPage` 和 `RegisterPage` 通过 `useEffect` 监听 `user` + `profile`，已登录用户自动跳转 `/`
+6. `AuthContext` 中的 `mapAuthError()` 将 Supabase 英文错误映射为中文（"邮箱或密码错误"、"邮箱未验证"、"该邮箱已被注册"等），`signIn`/`signUp`/`setUsername` 均经其转换
+7. Auth 页面中：字段级校验（空值、格式）使用内联 error div；API 层错误（Supabase 返回）统一用 `toast.error()` 以手绘风格 toast 展示
 
 ### 路由结构
 
@@ -260,3 +262,5 @@ const EditDrugDialog = lazy(() => import("@/components/EditDrugDialog").then(m =
 2. **`getSession()` 不是纯本地操作，必须加超时保底**。它会发起网络请求验证 token，在 Supabase free tier 休眠或网络不通时 Promise 可能永久不 resolve。用 `setTimeout`（8 秒）+ `cancelled` 标志位兜底，防止页面无限 loading。`cancelled` 标志很重要：React Strict Mode 下组件会 double-mount，清理函数需要阻止已卸载 effect 的 setState。
 
 3. **依赖 `user` 时用 `user?.id` 而非 `user` 对象**。`onAuthStateChange` 每次事件都创建新的 `session.user` 引用（即使是同一个用户），导致 `useCallback` 重建和重复请求。同时过滤掉 `TOKEN_REFRESHED` 和 `INITIAL_SESSION` 事件——前者只续期 token 不改变身份，后者已被 `getSession()` 处理过。
+
+4. **`signUp` 对已注册邮箱不报错**。Supabase 为防止邮箱枚举攻击，`signUp()` 对已注册邮箱仍返回成功，但 `data.user.identities` 为空数组 `[]`。在 `AuthContext.signUp` 中需专门检查 `data.user?.identities?.length === 0` 来判断「该邮箱已被注册」。

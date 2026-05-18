@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,7 +36,7 @@ export default function LoginPage() {
     const { error: err } = await signIn(email, password)
     setLoading(false)
 
-    if (err) setError(err)
+    if (err) toast.error(err)
   }
 
   return (

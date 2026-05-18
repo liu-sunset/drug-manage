@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,7 +38,11 @@ export default function RegisterPage() {
     const { error: err } = await signUp(email, password)
     setLoading(false)
 
-    if (err) setError(err)
+    if (err) {
+      toast.error(err)
+    } else {
+      toast.success("注册成功，请检查你的邮箱并确认验证链接")
+    }
   }
 
   return (

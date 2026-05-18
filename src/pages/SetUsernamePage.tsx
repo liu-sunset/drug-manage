@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { USERNAME_REGEX } from "@/lib/utils"
 
 export default function SetUsernamePage() {
+  const navigate = useNavigate()
   const { setUsername } = useAuth()
   const [username, setUsername2] = useState("")
   const [error, setError] = useState("")
@@ -27,7 +30,12 @@ export default function SetUsernamePage() {
     const { error: err } = await setUsername(username)
     setLoading(false)
 
-    if (err) setError(err)
+    if (err) {
+      toast.error(err)
+    } else {
+      toast.success("用户名设置成功")
+      navigate("/", { replace: true })
+    }
   }
 
   return (

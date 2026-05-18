@@ -18,6 +18,14 @@ interface AuthState {
 
 export const AuthContext = createContext<AuthState | undefined>(undefined)
 
+function mapAuthError(message: string): string {
+  if (message.includes("Invalid login credentials")) return "邮箱或密码错误"
+  if (message.includes("Email not confirmed")) return "邮箱未验证，请检查你的收件箱"
+  if (message.includes("already registered") || message.includes("already been registered")) return "该邮箱已被注册"
+  if (message.includes("Invalid email")) return "邮箱格式不正确"
+  return "操作失败，请稍后重试"
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -101,15 +109,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return { error: error.message }
-    return { error: null }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error: mapAuthError(error.message) }
+      return { error: null }
+    } catch {
+      return { error: "网络错误，请检查网络后重试" }
+    }
   }, [])
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) return { error: error.message }
-    return { error: null }
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) return { error: mapAuthError(error.message) }
+      // Supabase 出于安全考虑不会对已注册邮箱报错，但会返回空的 identities 数组
+      if (data.user?.identities?.length === 0) {
+        return { error: "该邮箱已被注册" }
+      }
+      return { error: null }
+    } catch {
+      return { error: "网络错误，请检查网络后重试" }
+    }
   }, [])
 
   const signOut = useCallback(async () => {
@@ -119,15 +139,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setUsername = useCallback(async (username: string) => {
     if (!user) return { error: "未登录" }
-    const { error } = await supabase
-      .from("profiles")
-      .insert({ id: user.id, username })
-    if (error) {
-      if (error.code === "23505") return { error: "该用户名已被占用" }
-      return { error: error.message }
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .insert({ id: user.id, username })
+      if (error) {
+        if (error.code === "23505") return { error: "该用户名已被占用" }
+        return { error: error.message }
+      }
+      await refreshProfile()
+      return { error: null }
+    } catch {
+      return { error: "网络错误，请检查网络后重试" }
     }
-    await refreshProfile()
-    return { error: null }
   }, [user, refreshProfile])
 
   const deleteAccount = useCallback(async () => {
